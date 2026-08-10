@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TikTok Encoder</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #0b0b0f;
+  color: white;
+}
+
+.container {
+  max-width: 700px;
+  margin: auto;
+  padding: 25px 18px;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.subtitle {
+  text-align: center;
+  color: #999;
+  margin-bottom: 30px;
+}
+
+.card {
+  background: #15151c;
+  border: 1px solid #292934;
+  border-radius: 18px;
+  padding: 20px;
+  margin-bottom: 18px;
+}
+
+.upload {
+  border: 2px dashed #555;
+  border-radius: 15px;
+  padding: 35px 15px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.upload:hover {
+  border-color: white;
+}
+
+input[type="file"] {
+  display: none;
+}
+
+button {
+  width: 100%;
+  padding: 15px;
+  border: 0;
+  border-radius: 12px;
+  background: white;
+  color: black;
+  font-size: 16px;
+  font-weight: bold;
+  margin-top: 15px;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.4;
+}
+
+select,
+input[type="range"] {
+  width: 100%;
+  margin-top: 8px;
+}
+
+select {
+  padding: 12px;
+  border-radius: 10px;
+  background: #22222b;
+  color: white;
+  border: 1px solid #444;
+}
+
+label {
+  display: block;
+  margin-top: 18px;
+  color: #ccc;
+}
+
+#status {
+  margin-top: 15px;
+  text-align: center;
+  color: #aaa;
+}
+
+.progress {
+  width: 100%;
+  height: 10px;
+  background: #292934;
+  border-radius: 20px;
+  overflow: hidden;
+  margin-top: 15px;
+}
+
+#bar {
+  height: 100%;
+  width: 0%;
+  background: white;
+  transition: width .2s;
+}
+
+.download {
+  display: none;
+  text-align: center;
+  margin-top: 20px;
+}
+
+.download a {
+  display: block;
+  padding: 14px;
+  background: white;
+  color: black;
+  border-radius: 12px;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.info {
+  color: #888;
+  font-size: 13px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>🎬 TikTok Encoder</h1>
+
+<div class="subtitle">
+HandBrake-style video optimization
+</div>
+
+<div class="card">
+
+<label class="upload" for="video">
+  📁<br><br>
+  Select your video
+  <br>
+  <small>MP4 / MOV / WebM</small>
+</label>
+
+<input id="video" type="file" accept="video/*">
+
+<p id="fileName" class="info">No video selected</p>
+
+</div>
+
+<div class="card">
+
+<h3>Encoding Settings</h3>
+
+<label>
+Video Codec
+<select id="codec">
+  <option value="libx264">H.264 (Recommended)</option>
+</select>
+</label>
+
+<label>
+Quality (CRF): <span id="crfValue">18</span>
+<input id="crf" type="range" min="16" max="28" value="18">
+</label>
+
+<label>
+Frame Rate
+<select id="fps">
+  <option value="original">Original FPS</option>
+  <option value="60">60 FPS</option>
+  <option value="30">30 FPS</option>
+</select>
+</label>
+
+<label>
+Resolution
+<select id="resolution">
+  <option value="original">Original</option>
+  <option value="1080">1080p</option>
+  <option value="720">720p</option>
+</select>
+</label>
+
+<button id="encode" disabled>
+  ⚡ Encode & Optimize
+</button>
+
+<div class="progress">
+  <div id="bar"></div>
+</div>
+
+<div id="status">Ready</div>
+
+<div class="download" id="downloadBox">
+  <a id="downloadLink">⬇️ Download Optimized Video</a>
+</div>
+
+</div>
+
+<div class="card info">
+
+<b>TikTok Optimization</b><br><br>
+
+The encoder prepares your video using H.264 video,
+AAC audio and MP4 output. TikTok may still apply
+its own processing after upload.
+
+</div>
+
+</div>
+
+<script type="module">
+
+import { FFmpeg } from
+"https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js";
+
+import {
+  fetchFile,
+  toBlobURL
+} from
+"https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js";
+
+const ffmpeg = new FFmpeg();
+
+const videoInput = document.getElementById("video");
+const encodeButton = document.getElementById("encode");
+const fileName = document.getElementById("fileName");
+const status = document.getElementById("status");
+const bar = document.getElementById("bar");
+const crf = document.getElementById("crf");
+const crfValue = document.getElementById("crfValue");
+const fps = document.getElementById("fps");
+const resolution = document.getElementById("resolution");
+const downloadBox = document.getElementById("downloadBox");
+const downloadLink = document.getElementById("downloadLink");
+
+let selectedFile = null;
+
+crf.addEventListener("input", () => {
+  crfValue.textContent = crf.value;
+});
+
+videoInput.addEventListener("change", () => {
+
+  selectedFile = videoInput.files[0];
+
+  if (!selectedFile) return;
+
+  fileName.textContent =
+    selectedFile.name +
+    " • " +
+    (selectedFile.size / 1024 / 1024).toFixed(2) +
+    " MB";
+
+  encodeButton.disabled = false;
+
+  status.textContent = "Video ready";
+
+});
+
+async function loadFFmpeg() {
+
+  if (ffmpeg.loaded) return;
+
+  status.textContent = "Loading encoder...";
+
+  const baseURL =
+    "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd";
+
+  await ffmpeg.load({
+    coreURL: await toBlobURL(
+      `${baseURL}/ffmpeg-core.js`,
+      "text/javascript"
+    ),
+
+    wasmURL: await toBlobURL(
+      `${baseURL}/ffmpeg-core.wasm`,
+      "application/wasm"
+    )
+  });
+}
+
+encodeButton.addEventListener("click", async () => {
+
+  if (!selectedFile) return;
+
+  try {
+
+    encodeButton.disabled = true;
+    downloadBox.style.display = "none";
+    bar.style.width = "0%";
+
+    await loadFFmpeg();
+
+    status.textContent = "Preparing video...";
+
+    const inputName = "input";
+
+    await ffmpeg.writeFile(
+      inputName,
+      await fetchFile(selectedFile)
+    );
+
+    ffmpeg.on("progress", ({ progress }) => {
+
+      const percent =
+        Math.min(100, Math.round(progress * 100));
+
+      bar.style.width = percent + "%";
+
+      status.textContent =
+        "Encoding... " + percent + "%";
+
+    });
+
+    const outputName = "tiktok-optimized.mp4";
+
+    let command = [
+      "-i",
+      inputName,
+      "-c:v",
+      "libx264",
+      "-preset",
+      "medium",
+      "-crf",
+      crf.value,
+      "-pix_fmt",
+      "yuv420p",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "192k",
+      "-movflags",
+      "+faststart"
+    ];
+
+    if (fps.value !== "original") {
+
+      command.push(
+        "-r",
+        fps.value
+      );
+
+    }
+
+    if (resolution.value !== "original") {
+
+      command.push(
+        "-vf",
+        `scale=-2:${resolution.value}`
+      );
+
+    }
+
+    command.push(outputName);
+
+    await ffmpeg.exec(command);
+
+    status.textContent = "Finalizing...";
+
+    const data =
+      await ffmpeg.readFile(outputName);
+
+    const blob =
+      new Blob([data.buffer], {
+        type: "video/mp4"
+      });
+
+    const url =
+      URL.createObjectURL(blob);
+
+    downloadLink.href = url;
+    downloadLink.download =
+      "tiktok-optimized.mp4";
+
+    downloadBox.style.display = "block";
+
+    bar.style.width = "100%";
+
+    status.textContent =
+      "✅ Encoding complete!";
+
+    encodeButton.disabled = false;
+
+  } catch (error) {
+
+    console.error(error);
+
+    status.textContent =
+      "❌ Encoding failed. Try another video.";
+
+    encodeButton.disabled = false;
+
+  }
+
+});
+
+</script>
+
+</body>
+</html>
